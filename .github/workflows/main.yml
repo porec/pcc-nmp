@@ -1,0 +1,37 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  build_and_scan:
+
+    runs-on: ubuntu-latest
+    env:
+        PC_USER: ${{ secrets.PC_USER }}
+        PC_PASS: ${{ secrets.PC_PASS }}
+        PC_CONSOLE_URL: ${{ secrets.PC_CONSOLE_URL }}
+        IMAGE_NAME: porec/pcc-nmp:latest
+        PRE_BUILD_GIT_SCAN_FLAG: true
+    
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Twistcli download
+      run: curl -s -k -u $PC_USER:$PC_PASS $PC_CONSOLE_URL/api/v1/util/twistcli -v -o twistcli;chmod +x twistcli
+    
+    - name: Scan Repo with Prisma Cloud
+      run: bash ./scripts/reposcan.sh
+    
+    - name: Build the Docker image
+      run: docker build . --file dockerfile --tag $IMAGE_NAME
+    
+    - name: Scan Image with Prisma Cloud
+      run: ./twistcli images scan --u $PC_USER --p $PC_PASS --address $PC_CONSOLE_URL --details $IMAGE_NAME
+      
+    - name: Sandbox image in Prisma Cloud
+      run: sudo ./twistcli sandbox -u $PC_USER --p $PC_PASS --address $PC_CONSOLE_URL --output-file "sandbox.json" --analysis-duration 1m $IMAGE_NAME
